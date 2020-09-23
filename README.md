@@ -20,6 +20,9 @@ The following set of algorithms are currently implemented.
 
     1. A.Cichocki, S.Amari, R.Zdunek, R.Kompass, G.Hori, and Z.He, "
 	Extended SMART algorithms for non-negative matrix factorization," Artificial Intelligence and Soft Computing, 2006.
+	[url](https://link.springer.com/chapter/10.1007/11785231_58)
+
+    Code implementing t
 
 - **Beta divergence** 
 	
