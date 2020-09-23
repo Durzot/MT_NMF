@@ -2,6 +2,6 @@
 
 This Julia package implements multiple variants of the Non-Negative Matrix factorisation algorithm which aims at solving the following optimization problem
 
-<img src="docs/img/nmf_problem.png" alt="image" width="100"/>
+<img src="docs/img/nmf_problem.png" alt="image" width="400"/>
 
 # 1. Implements 
