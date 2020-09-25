@@ -23,7 +23,7 @@ export NMFResults
 export initialize_nmf
 
 include("aux/structs.jl")
-include("aux/cluster.jl")
+include("aux/clustering.jl")
 include("aux/convergence.jl")
 include("aux/divergences.jl")
 include("aux/initialize.jl")

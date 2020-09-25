@@ -10,6 +10,23 @@ Created on Fri May 28 2020
 Algorithms for clustering data.
 """
 
+"""
+    build_conn(labels)
+
+Build the connectivity matrix C of a list of labels of size N. C has size N x N and C_ij is 1 if i and j are have the
+same label, 0 otherwise.
+"""
+function build_conn(labels::Array{Int64,1})
+    indices_1 = repeat(transpose(labels), length(labels), 1)
+    indices_2 = repeat(labels, 1, length(labels))
+    convert(Matrix{Float64}, indices_1 .== indices_2)
+end
+
+"""
+    _kmeans_cost(X, centroids, labels, dist_func)
+
+Auxiliary function for kmeans_init.
+"""
 function _kmeans_cost(X::Matrix{T}, centroids::Matrix{T}, labels::Vector{Int64}, dist_func::SemiMetric) where T <: Real
     list_intra_dist = Array{Float64, 1}()
 
@@ -26,8 +43,8 @@ end
 
 Run kmeans algorithm for a specified set of initial centroids. If `stopping_crit` is :dist, convergenced is reached when 
 the maximum distance between the new centroids and the ref centroids remains below `stopping_tol` for `stopping_iter` 
-consecutive iterations. If `stopping_crit` is cost, convergence is reached convergenced is reached when 
-the relative change in the cost remains below `stopping_tol` for `stopping_iter` consecutive iterations.
+consecutive iterations. If `stopping_crit` is :cost, convergence is reached  when  the relative change in the cost 
+remains below `stopping_tol` for `stopping_iter` consecutive iterations.
 """
 function kmeans_init(;X::Matrix{T}, init::Vector{Int64}, max_iter::Integer, dist_func::SemiMetric, stopping_crit::Symbol, stopping_tol::Real, stopping_iter::Real, verbose::Bool=false) where T <: Real
     n_clus        = length(init)
@@ -160,12 +177,6 @@ function kmeans_cons(;X::Matrix{T}, k_min::Integer, k_max::Integer, n_init::Inte
     mean(list_conn)
 end
 
-function build_conn(labels::Array{Int64,1})
-    indices_1 = repeat(transpose(labels), length(labels), 1)
-    indices_2 = repeat(labels, 1, length(labels))
-
-    convert(Matrix{Float64}, indices_1 .== indices_2)
-end
 
 # using PyPlot
 # using PyCall
