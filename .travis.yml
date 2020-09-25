@@ -8,6 +8,7 @@ julia:
 
 after_success:
   - julia -e 'using Pkg; cd(Pkg.dir("MyPkg")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+  - bash <(curl -s https://codecov.io/bash)
 
 branches:
   only:
