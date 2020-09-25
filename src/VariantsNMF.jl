@@ -1,4 +1,4 @@
-module VNMF
+module VariantsNMF
 
 using Clustering
 using DataFrames
