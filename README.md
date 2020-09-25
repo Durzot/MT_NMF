@@ -1,4 +1,7 @@
-# Math tool: NMF
+Math tool: VariantsNMF
+======================
+
+[![Build Status](https://travis-ci.org/Durzot/MT_NMF.svg?branch=master)](https://travis-ci.org/Durzot/MT_NMF)
 
 This Julia package implements multiple variants of the Non-Negative Matrix factorisation algorithm. Letting **X** be a non-negative matrix of dimensions having F rows and N columns, NMF aims at solving the following optimization problem
 
