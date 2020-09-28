@@ -30,18 +30,18 @@ function get_many_simulated_V()
     noise_Vs = Matrix{Float64}[] 
     noise_names = String[] 
 
-    push!(Vs, add_matrix_noise(WH=W*H, dist_E=Uniform(0,0.01), rng=rng))
-    push!(names, "uniform_small")
-    push!(Vs, add_matrix_noise(WH=W*H, dist_E=Uniform(0,0.2), rng=rng))
-    push!(names, "uniform_large")
-    push!(Vs, add_matrix_noise(WH=W*H, dist_E=Normal(0,0.01), rng=rng))
-    push!(names, "normal_small")
-    push!(Vs, add_matrix_noise(WH=W*H, dist_E=Normal(0,0.2), rng=rng))
-    push!(names, "normal_large")
-    push!(Vs, add_matrix_noise(WH=W*H, dist_E=Gamma(0.05,1), rng=rng))
-    push!(names, "gamma_small")
-    push!(Vs, add_matrix_noise(WH=W*H, dist_E=Gamma(0.05,4), rng=rng))
-    push!(names, "gamma_large")
+    push!(noise_Vs, add_matrix_noise(WH=W*H, dist_E=Uniform(0,0.01), rng=rng))
+    push!(noise_names, "uniform_small")
+    push!(noise_Vs, add_matrix_noise(WH=W*H, dist_E=Uniform(0,0.2), rng=rng))
+    push!(noise_names, "uniform_large")
+    push!(noise_Vs, add_matrix_noise(WH=W*H, dist_E=Normal(0,0.01), rng=rng))
+    push!(noise_names, "normal_small")
+    push!(noise_Vs, add_matrix_noise(WH=W*H, dist_E=Normal(0,0.2), rng=rng))
+    push!(noise_names, "normal_large")
+    push!(noise_Vs, add_matrix_noise(WH=W*H, dist_E=Gamma(0.05,1), rng=rng))
+    push!(noise_names, "gamma_small")
+    push!(noise_Vs, add_matrix_noise(WH=W*H, dist_E=Gamma(0.05,4), rng=rng))
+    push!(noise_names, "gamma_large")
 
     noise_Vs, noise_names
 end

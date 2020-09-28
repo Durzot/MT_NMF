@@ -4,7 +4,7 @@ using Test
 #### simulate
 V = get_one_simulated_V()
 
-@test "nmf_FI" begin
+@testset "nmf_FI" begin
     #### params for rank selection
     rc_params = RCParams(
         K_min = 2,
@@ -28,7 +28,6 @@ V = get_one_simulated_V()
         α_H       = 0,
         alg       = :mm
     )
-
 
     #### NMF struct
     nmf = NMF(

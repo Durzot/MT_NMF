@@ -6,8 +6,7 @@ using Test
 V = get_one_simulated_V()
 V = round.(V .* 100)
 
-@test "nmf_MU" begin
-
+@testset "nmf_MU" begin
     #### params for rank selection
     rs_params = RSParams(
         K_min     = 1,
