@@ -3,7 +3,7 @@ Created on Thu Apr 23 2020
 
 @author: Yoann Pradat
 
-Multiplicative update algorithsm
+Multiplicative update algorithms other than that of Fevotte & Idier.
 """
 
 abstract type AbstractMUParams <: AbstractNMFParams end
@@ -374,7 +374,7 @@ function _nmf_MU(V::Matrix{T}, W_init::Matrix{T}, H_init::Matrix{T}, global_para
         end
     end
 
-    NMFResults{T}(W, H, metrics, global_params, local_params)
+    NMFResults{T}(W, H, metrics, global_params, local_params, stopping_crit_met)
 end
 
 """

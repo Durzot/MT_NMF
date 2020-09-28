@@ -76,21 +76,24 @@ function _check_stopping_crit(metrics::NMFMetrics, global_params::AbstractNMFPar
     stopping_crit_met = false
     
     if global_params.stopping_crit == :conn
-        #### stop when the connectivity matrix remains constant
-        #### over successive iterations.
-        
+        #### stop when the connectivity matrix remains constant over successive iterations.
         if metrics.cur_iter > global_params.stopping_iter
             range_iter = (metrics.cur_iter-global_params.stopping_iter):(metrics.cur_iter-1)
             stopping_crit_met = all(metrics.unchange_conn[range_iter])
         end
         
-    elseif global_params.stopping_crit == :cost
-        #### stop when relative change in cost is below tolerance
-        #### over successive iterations
-
+    elseif global_params.stopping_crit == :rel_cost
+        #### stop when relative change in cost is below tolerance over successive iterations
         if metrics.cur_iter > global_params.stopping_iter
             range_iter = (metrics.cur_iter-global_params.stopping_iter):(metrics.cur_iter-1)
             stopping_crit_met = maximum(metrics.relative_cost[range_iter]) < global_params.stopping_tol
+        end
+
+    elseif global_params.stopping_crit == :cost
+        #### stop when absolute change in cost is below tolerance over successive iterations
+        if metrics.cur_iter > global_params.stopping_iter
+            range_iter = (metrics.cur_iter-global_params.stopping_iter):(metrics.cur_iter-1)
+            stopping_crit_met = maximum(metrics.absolute_cost[range_iter]) < global_params.stopping_tol
         end
     end
 

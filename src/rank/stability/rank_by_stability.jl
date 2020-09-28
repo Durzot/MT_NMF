@@ -115,7 +115,7 @@ function rank_by_stability(V::Matrix{T}, rs_params::RSParams, nmf::NMF) where T 
 
     for (i, K) in enumerate(K_min:K_max)
         for j in 1:n_iter
-            V_pert = VNMF._get_perturbed_matrix(V, pert_meth, pert_dist, rng)
+            V_pert = _get_perturbed_matrix(V, pert_meth, pert_dist, rng)
             nmf_K = copy(nmf)
             nmf_K.global_params.rank = K
             nmf_K.global_params.seed = seeds[(i-1) * n_iter + j]
@@ -125,7 +125,7 @@ function rank_by_stability(V::Matrix{T}, rs_params::RSParams, nmf::NMF) where T 
 
     #### run in parallel
     grid_nmf_results = @showprogress pmap(grid_nmf) do g
-        VNMF._rank_by_stability_one(g)
+        _rank_by_stability_one(g)
     end
         
     #### get reconstruction and stability results by rank

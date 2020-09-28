@@ -73,6 +73,19 @@ mutable struct FIParams <: AbstractFIParams
     end
 end
 
+# Overload copy from Base to allow copies FIParams structs
+Base.copy(params::FIParams) = FIParams(
+        β            = params.β,
+        scale_W_iter = params.scale_W_iter,
+        scale_W_last = params.scale_W_iter,
+        α_W          = params.α_W,
+        α_H          = params.α_H,
+        l₁ratio_H    = params.l₁ratio_H,
+        l₁ratio_W    = params.l₁ratio_W,
+        θ            = params.θ,
+        alg          = params.alg
+    )
+
 """
     _γ_β(β)
 
@@ -106,80 +119,82 @@ function _β_cost(V::Matrix{T}, W::Matrix{T}, H::Matrix{T}, params::FIParams) wh
 end
 
 """
-    _update_nmf_MM!(V, V_a, W, H, params)
+    _update_nmf_MM!(V, WH, W, H, params)
 
 Update the H and W matrices in that order using the update rules of Maximization-Minimization algorithm.
 """
-function _update_nmf_MM!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T}, params::FIParams) where T <: Real
+function _update_nmf_MM!(V::Matrix{T}, WH::Matrix{T}, W::Matrix{T}, H::Matrix{T}, params::FIParams) where T <: Real
     #### compute regularization
     #### for J_H = ||H||₁, ∇J_H = J_{K,N} with J the matrix filled with ones
     #### for J_H = 0.5*||H||₂, ∇J_H = H
     regu_H = H -> params.α_H * (params.l₁ratio_H * ones(size(H)) + (1. - params.l₁ratio_H) * H) / length(H)
     regu_W = W -> params.α_W * (params.l₁ratio_W * ones(size(W)) + (1. - params.l₁ratio_W) * W) / length(W)
+
+    β = params.β
     
     #### exponent for multiplicative updates
-    γ = _γ_β(params.β)
+    γ = _γ_β(β)
 
-    if params.β > 2
+    if β > 2
         #### update rules for β > 2
-        W .= W .* (((V .* V_a .^ (params.β-2)) * transpose(H) - regu_W(W)) ./ (V_a .^ (params.β-1) * transpose(H))) .^ γ
-        V_a .= W * H
+        W .= W .* (max.((V .* WH .^ (β-2)) * transpose(H) - regu_W(W), 0) ./ (WH .^ (β-1) * transpose(H))) .^ γ
+        WH .= W * H
 
-        H .= H .* ((transpose(W) * (V .* V_a .^ (params.β-2)) - regu_H(H)) ./ (transpose(W) * V_a .^ (params.β-1))) .^ γ
-        V_a .= W * H
+        H .= H .* (max.(transpose(W) * (V .* WH .^ (β-2)) - regu_H(H), 0) ./ (transpose(W) * WH .^ (β-1))) .^ γ
+        WH .= W * H
 
-    elseif params.β == 2
+    elseif β == 2
         #### update rules for β = 2 can be written more efficiently
         W .= W .* (max.(V * transpose(H) - regu_W(W), 0) ./ (W * (H * transpose(H))))
         H .= H .* (max.((transpose(W) * V - regu_H(H)), 0) ./ ((transpose(W) * W) * H))
-        V_a .= W * H
+        WH .= W * H
 
-    elseif 1 < params.β < 2
+    elseif 1 < β < 2
         #### update rules for 1 < β < 2
         #### the update of h_kn is obtained by solving
         #### \sum_f w_{fk} [ (\tilde{v}_f \frac{h_k}{\tilde{h}_k})^{\beta-1} - v_f (\tilde{v}_f \frac{h_k}{\tilde{h}_k})^{\beta-2} ] + \alpha_h \nabla_{h_k} J_k (h_k) = 0 with J_k the component of J_h(h) = \sum_k J_{k}(h_k)
         
         if params.α_W == 0
-            W .= W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H)))
+            W .= W .* (((V .* WH .^ (β-2)) * transpose(H)) ./ (WH .^ (β-1) * transpose(H)))
         else
             #### solving a X^2 + b X - c = 0 with X = \frac{h_k}{\tilde{h}_k}^{\beta-1}
-            a = V_a .^ (params.β-1) * transpose(H)
+            a = WH .^ (β-1) * transpose(H)
             b = regu_W(W)
-            c = (V .* V_a .^ (params.β-2)) * transpose(H)
+            c = (V .* WH .^ (β-2)) * transpose(H)
             Δ =  b .^ 2 + 4a .* c 
 
-            W .= W .* ((- b + sqrt.(Δ)) ./ (2a)) .^ (1. / (params.β-1))
+            W .= W .* ((- b + sqrt.(Δ)) ./ (2a)) .^ (1. / (β-1))
         end
 
-        V_a .= W * H
+        WH .= W * H
 
         if params.α_H == 0
-            H .= H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1)))
+            H .= H .* ((transpose(W) * (V .* WH .^ (β-2))) ./ (transpose(W) * WH .^ (β-1)))
         else
             #### see above
-            a = transpose(W) * V_a .^ (params.β-1) 
+            a = transpose(W) * WH .^ (β-1) 
             b = regu_H(H)
-            c = transpose(W) * (V .* V_a .^ (params.β-2))
+            c = transpose(W) * (V .* WH .^ (β-2))
             Δ =  b .^ 2 + 4a .* c 
 
-            H .= H .* ((- b + sqrt.(Δ)) ./ (2 .* a)) .^ (1. / (params.β-1))
+            H .= H .* ((- b + sqrt.(Δ)) ./ (2 .* a)) .^ (1. / (β-1))
         end
         
-        V_a .= W * H
+        WH .= W * H
 
-    elseif params.β <= 1
+    elseif β <= 1
         #### update rules for β <= 1
-        W .= W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H) + regu_W(W))) .^ γ
-        V_a .= W * H
+        W .= W .* (((V .* WH .^ (β-2)) * transpose(H)) ./ (WH .^ (β-1) * transpose(H) + regu_W(W))) .^ γ
+        WH .= W * H
 
-        H .= H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1) + regu_H(H))) .^ γ
-        V_a .= W * H
+        H .= H .* ((transpose(W) * (V .* WH .^ (β-2))) ./ (transpose(W) * WH .^ (β-1) + regu_H(H))) .^ γ
+        WH .= W * H
     end
 
     #### avoid underflow
     W .= max.(W, eps(T))
     H .= max.(H, eps(T))
-    V_a .= W * H
+    WH .= W * H
     
     if params.scale_W_iter
         scale_col_W!(W, H, 1)
@@ -187,11 +202,11 @@ function _update_nmf_MM!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T
 end
 
 """
-    _update_nmf_H!(V, V_a, W, H, params)
+    _update_nmf_H!(V, WH, W, H, params)
 
 Update the H and W matrices in that order using the update rules of Heuristic algorithm.
 """
-function _update_nmf_H!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T}, params::AbstractFIParams) where T <: Real
+function _update_nmf_H!(V::Matrix{T}, WH::Matrix{T}, W::Matrix{T}, H::Matrix{T}, params::AbstractFIParams) where T <: Real
     #### compute regularization
     #### for J_H = ||H||₁, ∇J_H = J_{K,N} with J the matrix filled with ones
     #### for J_H = 0.5*||H||₂, ∇J_H = H
@@ -200,17 +215,17 @@ function _update_nmf_H!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T}
     
     if params.β > 2
         #### update rules for β > 2
-        W .= W .* (((V .* V_a .^ (params.β-2)) * transpose(H) - regu_W(W)) ./ (V_a .^ (params.β-1) * transpose(H)))
-        V_a .= W * H
+        W .= W .* (((V .* WH .^ (params.β-2)) * transpose(H) - regu_W(W)) ./ (WH .^ (params.β-1) * transpose(H)))
+        WH .= W * H
 
-        H .= H .* ((transpose(W) * (V .* V_a .^ (params.β-2)) - regu_H(H)) ./ (transpose(W) * V_a .^ (params.β-1)))
-        V_a .= W * H
+        H .= H .* ((transpose(W) * (V .* WH .^ (params.β-2)) - regu_H(H)) ./ (transpose(W) * WH .^ (params.β-1)))
+        WH .= W * H
 
     elseif params.β == 2
         #### update rules for β = 2 can be written more efficiently
         W .= W .* ((V * transpose(H) - regu_W(W)) ./ (W * (H * transpose(H))))
         H .= H .* ((transpose(W) * V - regu_H(H)) ./ ((transpose(W) * W) * H))
-        V_a .= W * H
+        WH .= W * H
 
     elseif 1 < params.β < 2
         #### update rules for 1 < β < 2
@@ -218,46 +233,46 @@ function _update_nmf_H!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T}
         #### \sum_f w_{fk} [ (\tilde{v}_f \frac{h_k}{\tilde{h}_k})^{\beta-1} - v_f (\tilde{v}_f \frac{h_k}{\tilde{h}_k})^{\beta-2} ] + \alpha_h \nabla_{h_k} J_k (h_k) = 0 with J_k the component of J_h(h) = \sum_k J_{k}(h_k)
         
         if params.α_W == 0
-            W .= W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H)))
+            W .= W .* (((V .* WH .^ (params.β-2)) * transpose(H)) ./ (WH .^ (params.β-1) * transpose(H)))
         else
             #### solving a X^2 + b X - c = 0 with X = \frac{h_k}{\tilde{h}_k}^{\beta-1}
-            a = V_a .^ (params.β-1) * transpose(H)
+            a = WH .^ (params.β-1) * transpose(H)
             b = regu_W(W)
-            c = (V .* V_a .^ (params.β-2)) * transpose(H)
+            c = (V .* WH .^ (params.β-2)) * transpose(H)
             Δ =  b .^ 2 + 4a .* c 
 
             W .= W .* ((- b + sqrt.(Δ)) ./ (2 .* a)) .^ (1. / (params.β-1))
         end
 
-        V_a .= W * H
+        WH .= W * H
 
         if params.α_H == 0
-            H .= H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1)))
+            H .= H .* ((transpose(W) * (V .* WH .^ (params.β-2))) ./ (transpose(W) * WH .^ (params.β-1)))
         else
             #### see above
-            a = transpose(W) * V_a .^ (params.β-1) 
+            a = transpose(W) * WH .^ (params.β-1) 
             b = regu_H(H)
-            c = transpose(W) * (V .* V_a .^ (params.β-2))
+            c = transpose(W) * (V .* WH .^ (params.β-2))
             Δ =  b .^ 2 + 4a .* c 
 
             H .= H .* ((- b + sqrt.(Δ)) ./ (2a)) .^ (1. / (params.β-1))
         end
         
-        V_a .= W * H
+        WH .= W * H
 
     elseif params.β <= 1
         #### update rules for β <= 1
-        W .= W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H) + regu_W(W)))
-        V_a .= W * H
+        W .= W .* (((V .* WH .^ (params.β-2)) * transpose(H)) ./ (WH .^ (params.β-1) * transpose(H) + regu_W(W)))
+        WH .= W * H
 
-        H .= H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1) + regu_H(H)))
-        V_a .= W * H
+        H .= H .* ((transpose(W) * (V .* WH .^ (params.β-2))) ./ (transpose(W) * WH .^ (params.β-1) + regu_H(H)))
+        WH .= W * H
     end
 
     #### avoid underflow
     W .= max.(W, eps(T))
     H .= max.(H, eps(T))
-    V_a .= W * H
+    WH .= W * H
     
     if params.scale_W_iter
         scale_col_W!(W, H, 1)
@@ -266,11 +281,11 @@ end
 
 
 """
-    _update_nmf_ME!(V, V_a, W, H, params)
+    _update_nmf_ME!(V, WH, W, H, params)
 
 Update the H and W matrices in that order using the update rules of Maximization-Equalization algorithm.
 """
-function _update_nmf_ME!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T}, params::FIParams) where T <: Real
+function _update_nmf_ME!(V::Matrix{T}, WH::Matrix{T}, W::Matrix{T}, H::Matrix{T}, params::FIParams) where T <: Real
     #### compute regularization
     #### for J_H = ||H||₁, ∇J_H = J_{K,N} with J the matrix filled with ones
     #### for J_H = 0.5*||H||₂, ∇J_H = H
@@ -279,42 +294,42 @@ function _update_nmf_ME!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T
 
     if params.β == -1
         #### ME always defined
-        W_h = W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H) + regu_W(W)))
+        W_h = W .* (((V .* WH .^ (params.β-2)) * transpose(H)) ./ (WH .^ (params.β-1) * transpose(H) + regu_W(W)))
         W .= ((W_h .^ 2 + 8 * W_h .* W) .^ .5 + W_h) / 4
-        V_a .= W * H
+        WH .= W * H
 
-        H_h = H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1) + regu_H(H)))
+        H_h = H .* ((transpose(W) * (V .* WH .^ (params.β-2))) ./ (transpose(W) * WH .^ (params.β-1) + regu_H(H)))
         H .= ((H_h.^2 + 8 * H_h .* H) .^ .5 + H_h) / 4
-        V_a .= W * H
+        WH .= W * H
 
     elseif params.β == 0
         #### ME always defined, equal to H
-        W .= W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H) + regu_W(W)))
-        V_a .= W * H
+        W .= W .* (((V .* WH .^ (params.β-2)) * transpose(H)) ./ (WH .^ (params.β-1) * transpose(H) + regu_W(W)))
+        WH .= W * H
 
-        H .= H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1) + regu_H(H)))
-        V_a .= W * H
+        H .= H .* ((transpose(W) * (V .* WH .^ (params.β-2))) ./ (transpose(W) * WH .^ (params.β-1) + regu_H(H)))
+        WH .= W * H
 
     elseif params.β == 0.5
         #### ME always defined
-        W_h = W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H) + regu_W(W)))
+        W_h = W .* (((V .* WH .^ (params.β-2)) * transpose(H)) ./ (WH .^ (params.β-1) * transpose(H) + regu_W(W)))
         W .= (sqrt.(W + 8 * W_h) - sqrt.(W)) .^ 2 / 4
-        V_a .= W * H
+        WH .= W * H
 
-        H_h = H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1) + regu_H(H)))
+        H_h = H .* ((transpose(W) * (V .* WH .^ (params.β-2))) ./ (transpose(W) * WH .^ (params.β-1) + regu_H(H)))
         H .= (sqrt.(H + 8 * H_h) - sqrt.(H)) .^2 / 4
-        V_a .= W * H
+        WH .= W * H
 
     elseif params.β == 1.5
         #### mixed update prolonged ME and MM
 	
         #### compute W update from Heuristic algorithm
         if params.α_W == 0
-            W_h = W .* (((V .* V_a .^ (params.β-2)) * transpose(H)) ./ (V_a .^ (params.β-1) * transpose(H)))
+            W_h = W .* (((V .* WH .^ (params.β-2)) * transpose(H)) ./ (WH .^ (params.β-1) * transpose(H)))
         else
-            a = V_a .^ (params.β-1) * transpose(H)
+            a = WH .^ (params.β-1) * transpose(H)
             b = regu_W(W)
-            c = (V .* V_a .^ (params.β-2)) * transpose(H)
+            c = (V .* WH .^ (params.β-2)) * transpose(H)
             Δ =  b .^ 2 + 4a .* c 
 
             W_h = W .* ((- b + sqrt.(Δ)) ./ (2a)) .^ (1. / (params.β-1))
@@ -326,15 +341,15 @@ function _update_nmf_ME!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T
         W .= real.((sqrt.(Complex.(DW)) - sqrt.(W)) .^2 / 4)
         W[IW] .= 0
         W .= W_h + params.θ * (W - W_h)
-        V_a .= W * H              
+        WH .= W * H              
 
         #### compute H update from Heuristic algorithm
         if params.α_H == 0
-            H_h = H .* ((transpose(W) * (V .* V_a .^ (params.β-2))) ./ (transpose(W) * V_a .^ (params.β-1)))
+            H_h = H .* ((transpose(W) * (V .* WH .^ (params.β-2))) ./ (transpose(W) * WH .^ (params.β-1)))
         else
-            a = transpose(W) * V_a .^ (params.β-1) 
+            a = transpose(W) * WH .^ (params.β-1) 
             b = regu_H(H)
-            c = transpose(W) * (V .* V_a .^ (params.β-2))
+            c = transpose(W) * (V .* WH .^ (params.β-2))
             Δ =  b .^ 2 + 4a .* c 
 
             H_h = H .* ((- b .+ sqrt.(Δ)) ./ (2a)) .^ (1. / (params.β-1))
@@ -346,7 +361,7 @@ function _update_nmf_ME!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T
         H .= real.((sqrt.(Complex.(DH)) - sqrt.(H)) .^2 / 4)
         H[IH] .= 0
         H .= H_h + params.θ * (H - H_h)
-        V_a .= W * H
+        WH .= W * H
     
     elseif params.β == 2
         #### mixed update prolonged ME and MM
@@ -354,25 +369,25 @@ function _update_nmf_ME!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T
         W .= 2W_h - W
         W[W .<= 0] .= 0
         W .= W_h + params.θ * (W - W_h)
-        V_a .= W * H              
+        WH .= W * H              
 
         H_h = H .* ((transpose(W) * V - regu_H(H)) ./ ((transpose(W) * W) * H))
         H .= 2H_h - H
         H[H .<= 0] .= 0
         H .= H_h + params.θ * (H - H_h)
-        V_a .= W * H              
+        WH .= W * H              
     
     elseif params.β == 3
         #### mixed update prolonged ME and MM
-        W_h = W .* (((V .* V_a .^ (params.β-2)) * transpose(H) - regu_W(W)) ./ (V_a .^ (params.β-1) * transpose(H)))
+        W_h = W .* (((V .* WH .^ (params.β-2)) * transpose(H) - regu_W(W)) ./ (WH .^ (params.β-1) * transpose(H)))
         DW = W .* (12W_h - 3W)
         IW = 3W_h .< W 
         W .= real.(sqrt.(Complex.(DW)) - W) / 2
         W[IW] .= 0
         W .= W_h + params.θ * (W - W_h)
-        V_a .= W * H
+        WH .= W * H
 
-        H_h = H .* ((transpose(W) * (V .* V_a .^ (params.β-2)) - regu_H(H)) ./ (transpose(W) * V_a .^ (params.β-1)))
+        H_h = H .* ((transpose(W) * (V .* WH .^ (params.β-2)) - regu_H(H)) ./ (transpose(W) * WH .^ (params.β-1)))
 
         DH = H .* (12H_h - 3H)
         IH = 3H_h .< H
@@ -380,7 +395,7 @@ function _update_nmf_ME!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T
         H[IH] .= 0
         H .= H_h + params.θ * (H - H_h)
 
-        V_a .= W * H
+        WH .= W * H
     else
         throw(ArgumentError("ME algorithm not implemented for β=$(params.β)"))
     end
@@ -388,7 +403,7 @@ function _update_nmf_ME!(V::Matrix{T}, V_a::Matrix{T}, W::Matrix{T}, H::Matrix{T
     #### avoid underflow
     W .= max.(W, eps(T))
     H .= max.(H, eps(T))
-    V_a .= W * H
+    WH .= W * H
     
     if params.scale_W_iter
         scale_col_W!(W, H, 1)
@@ -401,9 +416,9 @@ end
 Helper function for `nmf_FI`. Runs the FI algorithms with given intial matrices W and H.
 """
 function _nmf_FI(V::Matrix{T}, W_init::Matrix{T}, H_init::Matrix{T}, global_params::AbstractNMFParams, local_params::AbstractFIParams) where T <: Real
-    W       = W_init[:,:]
-    H       = H_init[:,:]
-    V_a     = W * H
+    W  = W_init[:,:]
+    H  = H_init[:,:]
+    WH = W * H
 
     #### metrics and stopping_crit
     func_cost          = (V, W, H) -> _β_cost(V, W, H, local_params)
@@ -418,13 +433,13 @@ function _nmf_FI(V::Matrix{T}, W_init::Matrix{T}, H_init::Matrix{T}, global_para
     end
 
     while !stopping_crit_met && iteration_is_sane 
-        #### update V_a, W, H
+        #### update WH, W, H
         if local_params.alg == :mm
-            _update_nmf_MM!(V, V_a, W, H, local_params)
+            _update_nmf_MM!(V, WH, W, H, local_params)
         elseif local_params.alg == :h
-            _update_nmf_H!(V, V_a, W, H, local_params)
+            _update_nmf_H!(V, WH, W, H, local_params)
         elseif local_params.alg == :me
-            _update_nmf_ME!(V, V_a, W, H, local_params)
+            _update_nmf_ME!(V, WH, W, H, local_params)
         end
 
         #### update metrics 
@@ -436,10 +451,10 @@ function _nmf_FI(V::Matrix{T}, W_init::Matrix{T}, H_init::Matrix{T}, global_para
         #### check the stopping criterion
         stopping_crit_met = _check_stopping_crit(metrics, global_params)
 
-        #### print intermediate if verbose
-        if global_params.verbose && global_params.max_iter < 10
+        #### print intermediate if verbose ≥ 2
+        if global_params.verbose ≥ 2 && global_params.max_iter < 10
             @printf("iter %d/%d | cost: %.5g\n", metrics.cur_iter, global_params.max_iter, metrics.cur_cost)
-        elseif global_params.verbose && (metrics.cur_iter % (global_params.max_iter ÷ 10) == 0)
+        elseif global_params.verbose ≥ 2 && (metrics.cur_iter % (global_params.max_iter ÷ 10) == 0)
             @printf("iter %d/%d | cost: %.5g\n", metrics.cur_iter, global_params.max_iter, metrics.cur_cost)
         end
     end
@@ -452,15 +467,15 @@ function _nmf_FI(V::Matrix{T}, W_init::Matrix{T}, H_init::Matrix{T}, global_para
     if !iteration_is_sane
         @warn "Stopped nmf because sanity check not passed at iteration" metrics.cur_iter
     else
-        if metrics.cur_iter == global_params.max_iter && global_params.stopping_crit != :none
+        if global_params.verbose ≥ 1 && metrics.cur_iter == global_params.max_iter && global_params.stopping_crit != :none
             @warn "Maximum number of iterations reached"
         end
-        if global_params.verbose && metrics.cur_iter < global_params.max_iter
+        if global_params.verbose ≥ 1 && metrics.cur_iter < global_params.max_iter
             @info "Stopping criterion $(global_params.stopping_crit) met at iter $(metrics.cur_iter)"
         end
     end
 
-    NMFResults{T}(W, H, metrics, global_params, local_params)
+    NMFResults{T}(W, H, metrics, global_params, local_params, stopping_crit_met)
 end
 
 """

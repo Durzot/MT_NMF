@@ -20,6 +20,7 @@ export NMFMetrics
 export NMF
 export NMFParams
 export NMFResults
+export NMFSolver
 export initialize_nmf
 
 include("aux/structs.jl")

@@ -22,10 +22,10 @@ Set of basic parameters passed to the various NMF algorithms.
 - `dist::Distribution`    : distribution for random initialization. See [`_initialize_nmf`](@ref)
 - `seed::Integer`         : seed for random initializations
 - `max_iter::Integer`     : maximum number of iterations (in main procedure)
-- `stopping_crit::Symbol` : criterion for stopping iterations. One of :none or :cost
+- `stopping_crit::Symbol` : criterion for stopping iterations. One of :none, :conn, :rel_cost or :abs_cost
 - `stopping_iter::Symbol` : number of successive iterations with criterion satisfied for calling convergence
 - `stopping_tol::Real`    : tolerance for the stopping crit if crit is :cost
-- `verbose::Bool`         : whether to show intermediate information
+- `verbose::Integer`      : 0 for silent, 1 for warning and 2 and more for to show intermediate information
 """
 mutable struct NMFParams <: AbstractNMFParams
     rank::Integer
@@ -36,7 +36,7 @@ mutable struct NMFParams <: AbstractNMFParams
     stopping_crit::Symbol
     stopping_iter::Integer
     stopping_tol::Real
-    verbose::Bool
+    verbose::Integer
 
     function NMFParams(;
         rank::Integer          = 5,
@@ -47,10 +47,10 @@ mutable struct NMFParams <: AbstractNMFParams
         stopping_crit::Symbol  = :none,
         stopping_iter::Integer = 20,
         stopping_tol::Real     = 1e-5,
-        verbose::Bool          = false)
+        verbose::Integer       = 1)
 
         valid_init = [:default, :random, :nndsvd, :nndsvda, :nndsvdar]
-        valid_stopping_crit = [:none, :cost, :conn] 
+        valid_stopping_crit = [:none, :conn, :rel_cost, :abs_cost] 
 
         rank > 1  || throw(ArgumentError("rank must be at least 2"))
         max_iter > 1  || throw(ArgumentError("max_iter must be at least 2"))
@@ -130,15 +130,17 @@ mutable struct NMFResults{T} <: AbstractNMFResults
     metrics::NMFMetrics
     global_params::AbstractNMFParams
     local_params::AbstractNMFParams
+    converged::Bool
 
     function NMFResults{T}(
         W::Matrix{T}, 
         H::Matrix{T}, 
         metrics::NMFMetrics, 
         global_params::AbstractNMFParams, 
-        local_params::AbstractNMFParams) where T <: Real
+        local_params::AbstractNMFParams,
+        converged::Bool) where T <: Real
 
-        new{T}(W, H, metrics, global_params, local_params)
+        new{T}(W, H, metrics, global_params, local_params, converged)
     end
 end
 
@@ -157,4 +159,3 @@ end
 
 #### overload copy function for NMF struct
 Base.copy(nmf::NMF) = NMF(;Dict(n => deepcopy(getfield(nmf, n)) for n ∈ fieldnames(NMF))...)
-

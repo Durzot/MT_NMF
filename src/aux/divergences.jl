@@ -29,16 +29,12 @@ function β_divergence(X::Matrix{T}, Y::Matrix{T}, β::Real; ϵ::Float64=eps(T))
         Y_vec = vec(Y)
         X_vec = vec(X)
 
-        # 0 coordinates in X contribute 0 to the divergence.
-        # drop these coordinates
-        indices = X_vec .> ϵ 
-        Y_vec = Y_vec[indices]
-        X_vec = X_vec[indices]
-
-        # avoid division by zero
-        Y_vec[Y_vec .== 0] .= ϵ
-
         if β == 1
+            # drop 0 coordinates in X that contribute 0 to the divergence as (x -> xlog(x) continuous in 0)
+            indices = X_vec .> ϵ 
+            Y_vec = Y_vec[indices]
+            X_vec = X_vec[indices]
+
             #### Kullback-Leibler divergence
             sum_X_log_X_Y = sum(X_vec .* log.(X_vec ./ Y_vec))
             sum_X         = sum(X_vec)
@@ -46,6 +42,9 @@ function β_divergence(X::Matrix{T}, Y::Matrix{T}, β::Real; ϵ::Float64=eps(T))
             res           = abs(sum_X_log_X_Y - sum_X + sum_Y)
 
         elseif β == 0
+            sum(X_vec .== 0) == 0 || throw(ArgumentError("for β=0, β-divergence is undefined if X has null entries"))
+            sum(Y_vec .== 0) == 0 || throw(ArgumentError("for β=0, β-divergence is undefined if Y has null entries"))
+
             #### Itakura-Saito divergence
             X_Y         = X_vec ./ Y_vec
             sum_log_X_Y = sum(log.(X_Y))
@@ -53,6 +52,17 @@ function β_divergence(X::Matrix{T}, Y::Matrix{T}, β::Real; ϵ::Float64=eps(T))
             res         = abs(-sum_log_X_Y + sum_X_Y_m1)
 
         else
+            if β > 0 && β < 1
+                sum(Y_vec .== 0) == 0 || throw(ArgumentError("for 0<β<1, β-divergence is undefined if Y has null entries"))
+                # drop 0 coordinates in X that contribute 0 to the divergence as (x -> xlog(x) continuous in 0)
+                indices = X_vec .> ϵ 
+                Y_vec = Y_vec[indices]
+                X_vec = X_vec[indices]
+            elseif β < 0
+                sum(X_vec .== 0) == 0 || throw(ArgumentError("for β<0, β-divergence is undefined if X has null entries"))
+                sum(Y_vec .== 0) == 0 || throw(ArgumentError("for β<0, β-divergence is undefined if Y has null entries"))
+            end
+
             #### General β-divergence for β not in (0, 1, 2)
             sum_X_β      = sum(X_vec .^ β)
             sum_Y_β      = sum(Y_vec .^ β)
